@@ -1,0 +1,31 @@
+[tool.pyright]
+strict = ["src"]
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dippy-commune-subnet"
+version = "0.1.1"
+description = "Dippy Commune Subnet"
+authors = [{ name = "dknoller", email = "dknoller@fastmail.com" }]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+]
+
+[project.urls]
+homepage = "https://github.com/impel-intelligence/dippy-commune-subnet"
+repository = "https://github.com/impel-intelligence/dippy-commune-subnet"
+documentation = "https://github.com/impel-intelligence/dippy-commune-subnet"
+
+[tool.poetry.dependencies]
+python = ">=3.10, <4.0"
+typer = "^0.9.0"
+pydantic-settings = "^2.2.1"
+loguru = "^0.1.0"
+communex= "^0.1.28"
+keylimiter = "^0.1.5"
+openai = "^1.14.2"
