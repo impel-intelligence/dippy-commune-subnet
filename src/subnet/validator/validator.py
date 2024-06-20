@@ -32,7 +32,7 @@ from communex.types import Ss58Address  # type: ignore
 from substrateinterface import Keypair  # type: ignore
 
 from ._config import ValidatorSettings
-from ..utils import log
+from subnet.utils import log
 
 IP_REGEX = re.compile(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+")
 
@@ -188,6 +188,8 @@ class TextValidator(Module):
         self.val_model = "foo"
         self.call_timeout = call_timeout
 
+
+
     def get_addresses(self, client: CommuneClient, netuid: int) -> dict[int, str]:
         """
         Retrieve all module addresses from the subnet.
@@ -326,6 +328,17 @@ class TextValidator(Module):
 
         # the blockchain call to set the weights
         _ = set_weights(settings, score_dict, self.netuid, self.client, self.key)
+
+    def validation_registrar(self):
+
+        refill_rate = 1 / 400
+        # Implementing custom limit
+        bucket = TokenBucketLimiter(2, refill_rate)
+        server = ModuleServer(miner, key, ip_limiter=bucket, subnets_whitelist=[3])
+        app = server.get_fastapi_app()
+
+        # Only allow local connections
+        uvicorn.run(app, host="127.0.0.1", port=8000)
 
     def validation_loop(self, settings: ValidatorSettings) -> None:
         """

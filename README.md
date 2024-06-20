@@ -4,6 +4,7 @@ Subnet template built on top of [CommuneX](https://github.com/agicommies/commune
 
 Lern how to structure, build and deploy a subnet on [Commune AI](https://communeai.org/)!
 
+
 ## Dependencies
 
 The whole subnet template is built on top of the [CommuneX library / SDK](https://github.com/agicommies/communex).
@@ -20,7 +21,13 @@ keylimiter
 pydantic-settings
 ```
 
+## Model ranking methodology
+
 ## Miner
+
+Mining for this subnet involves training an LLM that requires `safetensors` and a limited filesize.
+
+
 
 From the root of your project, you can just call **comx module serve**. For example:
 
@@ -36,6 +43,12 @@ To run the validator, just call the file in which you are executing `validator.v
 ```sh
 python3 -m commune-subnet-template.subnet.cli <name-of-your-com-key>
 ```
+
+
+## Roadmap
+- [] Basic subnet functionality
+- [] Inference for top model
+- 
 
 ## Further reading
 
