@@ -1,7 +1,8 @@
 [tool.pyright]
 strict = ["src"]
+
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -13,8 +14,6 @@ license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.10"
 
-dependencies = [
-]
 
 [project.urls]
 homepage = "https://github.com/impel-intelligence/dippy-commune-subnet"
