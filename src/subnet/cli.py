@@ -17,6 +17,10 @@ app = typer.Typer()
 from substrateinterface import Keypair, KeypairType
 import sr25519
 
+TESTNET_URL="wss://testnet-commune-api-node-0.communeai.net"
+TESTNET_UID = 27
+REGISTRY_ADDRESS = "5GNLjDNYPAcm4LV9mHRK5K9cYf4FvZdpBEDcojFAY5farF11"
+
 @app.command("validator")
 def validator(
     commune_key: Annotated[
@@ -26,28 +30,41 @@ def validator(
 ):
     keypair = classic_load_key(commune_key)  # type: ignore
     settings = ValidatorSettings()  # type: ignore
-    c_client = CommuneClient(get_node_url())
-    subnet_uid = get_subnet_netuid("dippy")
+    # c_client = CommuneClient(get_node_url())
+    c_client = CommuneClient(TESTNET_URL)
+    # subnet_uid = get_subnet_netuid("dippy")
+    subnet_uid = TESTNET_UID
     validator = DippyValidator(
-        keypair,
-        subnet_uid,
-        c_client,
         call_timeout=call_timeout,
+        key=keypair,
+    netuid=subnet_uid,
+    client=c_client,
+    registry_address=REGISTRY_ADDRESS,
     )
     validator.validation_loop(settings)
 
-TESTNET_URL="wss://testnet-commune-api-node-0.communeai.net"
 
 
 
+"""
+For a miner, register a model
+"""
 @app.command("register")
 def register(
     commune_key: Annotated[
         str, typer.Argument(help="Name of the key present in `~/.commune/key`")
     ],
+    registry_address: Annotated[
+        str,
+        typer.Option(
+            "--registry-address", "-r",
+            help="Address of the registry (optional)"
+        )
+    ] = REGISTRY_ADDRESS,
+
 ):
     keypair = classic_load_key(commune_key)  # type: ignore
-    destination = Ss58Address("5GNLjDNYPAcm4LV9mHRK5K9cYf4FvZdpBEDcojFAY5farF11")
+    destination = Ss58Address(registry_address)
 
     message = b'million dollar baby'
 
@@ -137,7 +154,7 @@ def debug(
     client = ModuleClient(module_ip, port, keypair)
 
     stake = c_client.get_stake(f, netuid=0)
-    print(f"stake for {f} is {stake}")
+    print(f"stake for is {stake}")
     # print("created client, making call")
     try:
         # handles the communication with the miner

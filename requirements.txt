@@ -4,3 +4,4 @@ uvicorn
 keylimiter
 pydantic-settings
 cachetools
+pydantic

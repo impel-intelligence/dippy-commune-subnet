@@ -1,10 +1,10 @@
 from loguru import logger
 import os,sys
-
+import time
 class EventLogger:
 
 
-    def __init__(self, filepath="/tmp/commune_event_logs/validator_api_{time}.log"):
+    def __init__(self, filepath=f"/tmp/commune_event_logs/validator_api_{time.time()}.log"):
         self.logger = logger
         # Determine the directory part from the filepath
         log_directory = os.path.dirname(filepath)

@@ -33,14 +33,14 @@ def try_ss58_decode(key: bytes | str):
     return ss58
 
 TESTNET_URL="wss://testnet-commune-api-node-0.communeai.net"
-
+TESTNET_UID = 27
 class MinerRegistry(Module):
 
     def __init__(self):
         super().__init__()
-        self.filepath = "./data/model_submission.json"
+
         self.client = CommuneClient(TESTNET_URL)
-        self.netuid = 27
+        self.netuid = TESTNET_UID
         # Double the amount of registrable keys
         self.registry = LRUCache(maxsize=1640)
         self.logger = EventLogger()
@@ -133,7 +133,7 @@ if __name__ == "__main__":
     """
     from communex.module.server import ModuleServer
     import uvicorn
-    cli("key0")
+    cli("registrar")
     #
     # key = generate_keypair()
     # miner = MinerRegistry()
