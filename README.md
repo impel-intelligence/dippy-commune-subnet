@@ -26,14 +26,9 @@ pydantic-settings
 ## Miner
 
 Mining for this subnet involves training an LLM that requires `safetensors` and a limited filesize.
-
-
-
-From the root of your project, you can just call **comx module serve**. For example:
+You do not need to operate a long running module, but rather simply send submissions.
 
 ```sh
-comx module serve commune-subnet-template.subnet.miner.model.Miner <name-of-your-com-key> [--subnets-whitelist <your-subnet-netuid>] \
-[--ip <text>] [--port <number>]
 ```
 
 ## Validator

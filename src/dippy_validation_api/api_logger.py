@@ -1,12 +1,13 @@
 from loguru import logger
 import os, sys
-import time
 
 
 class EventLogger:
-
     def __init__(
-        self, filepath=f"/tmp/commune_event_logs/validator_api_{time.time()}.log"
+        self,
+        filepath="/tmp/valapi_event_logs/validator_api_{time}.log",
+        level="INFO",
+        stderr=False,
     ):
         self.logger = logger
         # Determine the directory part from the filepath
@@ -25,16 +26,18 @@ class EventLogger:
 
         # Configure loguru logger for JSON output and file rotation
         format = "{time} | {level} | {message}"
-        console_format = "{time} | {message}"
         self.logger.remove()  # Remove default configuration
-        self.logger.add(
-            sys.stderr,
-            format=console_format,
-            serialize=False,  # For JSON output in console
-        )
+        if stderr:
+            self.logger.add(
+                sys.stderr,
+                format=format,
+                level=level,
+                serialize=True,  # For JSON output in console
+            )
         self.logger.add(
             filepath,
             rotation="100 MB",
+            level=level,
             format=format,
             serialize=True,  # For JSON output in file with rotation
         )
@@ -60,14 +63,8 @@ class EventLogger:
 def example():
     try:
         json_logger = EventLogger()
-        json_logger.info(
-            "This is an info message", extra={"user": "admin", "status": "active"}
-        )
-        json_logger.error(
-            "This is an error essage", extra={"user": "guest", "error_code": 500}
-        )
-        json_logger.debug(
-            "This is a debug message", extra={"user": "developer", "debug_mode": "on"}
-        )
+        json_logger.info("This is an info message", extra={"user": "admin", "status": "active"})
+        json_logger.error("This is an error essage", extra={"user": "guest", "error_code": 500})
+        json_logger.debug("This is a debug message", extra={"user": "developer", "debug_mode": "on"})
     except PermissionError as e:
         print(f"Failed to initialize logger: {e}")

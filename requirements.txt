@@ -5,3 +5,4 @@ keylimiter
 pydantic-settings
 cachetools
 pydantic
+loguru

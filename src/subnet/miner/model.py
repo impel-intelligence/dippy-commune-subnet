@@ -7,14 +7,18 @@ from keylimiter import TokenBucketLimiter
 from substrateinterface.utils.ss58 import ss58_encode
 
 HEX_PATTERN = re.compile(r"^[0-9a-fA-F]+$")
+
+
 def is_hex_string(string: str):
     return bool(HEX_PATTERN.match(string))
+
 
 def parse_hex(hex_str: str) -> bytes:
     if hex_str[0:2] == "0x":
         return bytes.fromhex(hex_str[2:])
     else:
         return bytes.fromhex(hex_str)
+
 
 def try_ss58_decode(key: bytes | str):
     ss58_format = 42
@@ -25,7 +29,15 @@ def try_ss58_decode(key: bytes | str):
         return None
     return ss58
 
-TESTNET_URL="wss://testnet-commune-api-node-0.communeai.net"
+
+TESTNET_URL = "wss://testnet-commune-api-node-0.communeai.net"
+TESTNET_UID = 27
+
+"""
+Unlike other subnets, you do not need a constantly running miner
+
+"""
+
 
 class Miner(Module):
 
@@ -44,11 +56,11 @@ class Miner(Module):
     Methods:
         generate: Generates a response to a given prompt using a specified model.
     """
+
     @endpoint
     def model_submission(
-            self,
-            competition_id: str = "",
-            caller_key: str = Header(None, alias='x-key')):
+        self, competition_id: str = "", caller_key: str = Header(None, alias="x-key")
+    ):
         if not is_hex_string(caller_key):
             return None
         key = parse_hex(caller_key)
@@ -69,13 +81,13 @@ class Miner(Module):
         """
         import os
         import json
+
         try:
-            with open(self.filepath, 'r') as file:
+            with open(self.filepath, "r") as file:
                 return json.load(file)
         except Exception as e:
             print(e)
             return None
-
 
 
 if __name__ == "__main__":

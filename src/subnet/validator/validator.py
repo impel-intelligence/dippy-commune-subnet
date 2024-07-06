@@ -17,9 +17,13 @@ Constants:
 
 import asyncio
 import concurrent.futures
+import functools
 import re
 import time
+from datetime import datetime
 from functools import partial
+import json
+from typing import Optional
 
 from communex.client import CommuneClient  # type: ignore
 from communex.module.client import ModuleClient  # type: ignore
@@ -27,9 +31,14 @@ from communex.module.module import Module  # type: ignore
 from communex.types import Ss58Address  # type: ignore
 from substrateinterface import Keypair  # type: ignore
 
+from dippy_validation_api.request import get_model_score
 from ._config import ValidatorSettings
 from subnet.utils import log
-from ..common.node_entry import NodeEntry
+from subnet.common.node_entry import NodeEntry
+from ..common.registry_client import RegistryClient
+from ..common.score_client import ScoreClient
+
+REGISTRY_KEY = "5Exsj2WLrVqAeoRKPKGKmAX3HCsiPwb4LNy6975xCJUKWMp7"
 
 IP_REGEX = re.compile(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+")
 
@@ -42,7 +51,7 @@ def set_weights(
     netuid: int,
     client: CommuneClient,
     key: Keypair,
-) -> None:
+) -> Optional[bool]:
     """
     Set weights for miners based on their scores.
 
@@ -52,33 +61,36 @@ def set_weights(
         client: The CommuneX client.
         key: The keypair for signing transactions.
     """
+    try:
+        # you can replace with `max_allowed_weights` with the amount your subnet allows
+        score_dict = cut_to_max_allowed_weights(score_dict, settings.max_allowed_weights)
 
-    # you can replace with `max_allowed_weights` with the amount your subnet allows
-    score_dict = cut_to_max_allowed_weights(score_dict, settings.max_allowed_weights)
+        # Create a new dictionary to store the weighted scores
+        weighted_scores: dict[int, int] = {}
 
-    # Create a new dictionary to store the weighted scores
-    weighted_scores: dict[int, int] = {}
+        # Calculate the sum of all inverted scores
+        scores = sum(score_dict.values())
 
-    # Calculate the sum of all inverted scores
-    scores = sum(score_dict.values())
+        # process the scores into weights of type dict[int, int]
+        # Iterate over the items in the score_dict
+        for uid, score in score_dict.items():
+            # Calculate the normalized weight as an integer
+            weight = int(score * 1000 / scores)
 
-    # process the scores into weights of type dict[int, int] 
-    # Iterate over the items in the score_dict
-    for uid, score in score_dict.items():
-        # Calculate the normalized weight as an integer
-        weight = int(score * 1000 / scores)
+            # Add the weighted score to the new dictionary
+            weighted_scores[uid] = weight
 
-        # Add the weighted score to the new dictionary
-        weighted_scores[uid] = weight
+        # filter out 0 weights
+        weighted_scores = {k: v for k, v in weighted_scores.items() if v != 0}
 
+        uids = list(weighted_scores.keys())
+        weights = list(weighted_scores.values())
+        # send the blockchain call
 
-    # filter out 0 weights
-    weighted_scores = {k: v for k, v in weighted_scores.items() if v != 0}
-
-    uids = list(weighted_scores.keys())
-    weights = list(weighted_scores.values())
-    # send the blockchain call
-    client.vote(key=key, uids=uids, weights=weights, netuid=netuid)
+        client.vote(key=key, uids=uids, weights=weights, netuid=netuid)
+        return True
+    except Exception as e:
+        return False
 
 
 def cut_to_max_allowed_weights(
@@ -108,28 +120,6 @@ def extract_address(string: str):
     Extracts an address from a string.
     """
     return re.search(IP_REGEX, string)
-
-
-def get_subnet_netuid(clinet: CommuneClient, subnet_name: str = "replace-with-your-subnet-name"):
-    """
-    Retrieve the network UID of the subnet.
-
-    Args:
-        client: The CommuneX client.
-        subnet_name: The name of the subnet (default: "foo").
-
-    Returns:
-        The network UID of the subnet.
-
-    Raises:
-        ValueError: If the subnet is not found.
-    """
-
-    subnets = clinet.query_map_subnet_names()
-    for netuid, name in subnets.items():
-        if name == subnet_name:
-            return netuid
-    raise ValueError(f"Subnet {subnet_name} not found")
 
 
 def get_ip_port(modules_adresses: dict[int, str]):
@@ -175,38 +165,52 @@ class DippyValidator(Module):
         key: Keypair,
         netuid: int,
         client: CommuneClient,
-        registry_address: str,
+        registry_address: str = "",
         call_timeout: int = 60,
     ) -> None:
         super().__init__()
+        self.self_uid = None
         self.client = client
         self.key = key
         self.netuid = netuid
         self.registry_address = registry_address
         self.call_timeout = call_timeout
+        self.settings: ValidatorSettings = ValidatorSettings()
+        rc = RegistryClient(self.key, True)
+        self.registry_client = rc.module_client()
+        self.registry_client_key = rc.destination_key
+        self.score_client = ScoreClient()
+
+
+    def _get_miner_scores(self,
+                          modules_entries: dict[int, NodeEntry],
+                          ) -> dict[int, NodeEntry]:
+        for uid, entry in modules_entries.items():
+            score = self._get_miner_full_score(entry)
+            modules_entries[uid].initial_score = score
+            modules_entries[uid].tz_update()
+        return modules_entries
+
+
+    def _get_miner_full_score(self, entry: NodeEntry) -> float:
+        score = 0.0
+        try:
+            score = get_model_score(
+                namespace=entry.submission_data["namespace"],
+                name=entry.submission_data["name"],
+                hash=entry.submission_data["hash"],
+                template=entry.submission_data["template"],)
+        except Exception as e:
+            print(e)
+        return score
 
 
 
-    def get_addresses(self, client: CommuneClient, netuid: int) -> dict[int, str]:
-        """
-        Retrieve all module addresses from the subnet.
-
-        Args:
-            client: The CommuneClient instance used to query the subnet.
-            netuid: The unique identifier of the subnet.
-
-        Returns:
-            A dictionary mapping module IDs to their addresses.
-        """
-
-        # Makes a blockchain query for the miner addresses
-        return client.query_map_address(netuid)
-
-    def _get_miner_model(
+    async def _get_miner_submissions(
         self,
-        question: str,
-        miner_info: tuple[list[str], Ss58Address],
-    ) -> str | None:
+        modules_entries: dict[int, NodeEntry],
+        anything=None,
+    ) -> dict[int, NodeEntry]:
         """
         Prompt a miner module to generate an answer to the given question.
 
@@ -217,38 +221,26 @@ class DippyValidator(Module):
         Returns:
             The generated answer from the miner module, or None if the miner fails to generate an answer.
         """
-        # self.registry_address
-        connection, miner_key = miner_info
-        module_ip, module_port = connection
-        client = ModuleClient(module_ip, int(module_port), self.key)
-        try:
-            # handles the communication with the miner
-            miner_answer = asyncio.run(
-                client.call(
-                    "generate",
-                    miner_key,
-                    {"prompt": question},
-                    timeout=self.call_timeout,  #  type: ignore
+        for uid, entry in modules_entries.items():
+            try:
+                submission = await self.registry_client.call(
+                    fn="get_entry",
+                    target_key=self.registry_client_key,
+                    params={"key": entry.hotkey},
+                    timeout=self.call_timeout,
                 )
-            )
-            miner_answer = miner_answer["answer"]
-
-        except Exception as e:
-            log(f"Miner {module_ip}:{module_port} failed to generate an answer")
-            print(e)
-            miner_answer = None
-        return miner_answer
+                print(f"received submission: {submission}")
+                if submission is None:
+                    continue
+                dt = datetime.fromisoformat(submission["time"])
+                model_info = json.loads(submission["data"])
+                modules_entries[uid].submission_time = dt
+                modules_entries[uid].submission_data = model_info
+            except Exception as e:
+                log(f"Miner failed to generate an answer {str(e)}")
+        return modules_entries
 
     def _score_miner(self, miner_answer: str | None) -> float:
-        """
-        Score the generated answer against the validator's own answer.
-
-        Args:
-            miner_answer: The generated answer from the miner module.
-
-        Returns:
-            The score assigned to the miner's answer.
-        """
 
         # Implement your custom scoring logic here
         if not miner_answer:
@@ -256,20 +248,7 @@ class DippyValidator(Module):
 
         return 0
 
-    def get_miner_prompt(self) -> str:
-        """
-        Generate a prompt for the miner modules.
-
-        Returns:
-            The generated prompt for the miner modules.
-        """
-
-        # Implement your custom prompt generation logic here
-        return "foo"
-
-    async def validate_step(
-        self, netuid: int, settings: ValidatorSettings
-    ) -> None:
+    async def validate_step(self, netuid: int, settings: ValidatorSettings) -> None:
         """
         Perform a validation step.
 
@@ -281,11 +260,17 @@ class DippyValidator(Module):
         """
 
         print(f"start valdiation step : {netuid} and {settings}")
-        # retrive the miner information
-        module_addresses = self.get_addresses(self.client, netuid)
+        """
+        Retrieve the miner information for the netuid. 
+        We perform this step synchronously so no need to worry about fetching stale miners
+        """
+        module_addresses = self.client.query_map_address(netuid)
         modules_keys = self.client.query_map_key(netuid)
         val_ss58 = self.key.ss58_address
-        if val_ss58 not in modules_keys.values():
+        for uid, ss58key in modules_keys.items():
+            if ss58key == val_ss58:
+                self.self_uid = uid
+        if not self.self_uid:
             raise RuntimeError(f"validator key {val_ss58} is not registered in subnet")
 
         modules_info: dict[int, tuple[list[str], Ss58Address]] = {}
@@ -298,60 +283,37 @@ class DippyValidator(Module):
             if not module_addr:
                 continue
             modules_entries[uid] = NodeEntry(
-                hotkey = modules_keys[uid],
+                hotkey=modules_keys[uid],
                 ip=module_addr[0],
                 port=int(module_addr[1]),
             )
             modules_info[uid] = (module_addr, modules_keys[uid])
-
-        score_dict: dict[int, float] = {}
-
-        # miner_prompt = self.get_miner_prompt()
-        # get_miner_prediction = partial(self._get_miner_model, miner_prompt)
-
-        for k, v in modules_entries.items():
-            print(f"{k} : {v} ")
-
-        log(f"Selected the following miners: {modules_info.keys()}")
-
-        # with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        #     it = executor.map(get_miner_prediction, modules_info.values())
-        #     miner_answers = [*it]
-        #
-        # for uid, miner_response in zip(modules_info.keys(), miner_answers):
-        #     miner_answer = miner_response
-        #     if not miner_answer:
-        #         log(f"Skipping miner {uid} that didn't provide a model uploaded")
-        #         continue
-        #
-        #     score = self._score_miner(miner_answer)
-        #     time.sleep(0.5)
-        #     # score has to be lower or eq to 1, as one is the best score, you can implement your custom logic
-        #     assert score <= 1
-        #     score_dict[uid] = score
-
-        if not score_dict:
-            log("No miner managed to give a valid answer")
-            return None
-
+        modules_entries = await self._get_miner_submissions(modules_entries)
+        modules_entries = self._get_miner_scores(modules_entries)
+        score_dict = self.score_client.normalize_scores(modules_entries)
+        for k, v in score_dict.items():
+            log(f"score {k} : {v} ")
+        # Cannot set self weight
+        del score_dict[self.self_uid]
         # the blockchain call to set the weights
-        # _ = set_weights(settings, score_dict, self.netuid, self.client, self.key)
+        success = set_weights(settings, score_dict, self.netuid, self.client, self.key)
+        if success:
+            log(f"Set weights : {score_dict}")
 
-
-    def validation_loop(self, settings: ValidatorSettings) -> None:
+    def validation_loop(self, vali_settings: ValidatorSettings) -> None:
         """
         Run the validation loop continuously based on the provided settings.
 
         Args:
-            settings: The validator settings to use for the validation loop.
+            vali_settings: The validator settings to use for the validation loop.
         """
 
         while True:
             start_time = time.time()
-            _ = asyncio.run(self.validate_step(self.netuid, settings))
+            _ = asyncio.run(self.validate_step(self.netuid, vali_settings))
 
             elapsed = time.time() - start_time
-            if elapsed < settings.iteration_interval:
-                sleep_time = settings.iteration_interval - elapsed
+            if elapsed < vali_settings.iteration_interval:
+                sleep_time = vali_settings.iteration_interval - elapsed
                 log(f"Sleeping for {sleep_time}")
                 time.sleep(sleep_time)
