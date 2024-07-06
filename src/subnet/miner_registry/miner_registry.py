@@ -14,14 +14,18 @@ from util.event_logger import EventLogger
 import re
 
 HEX_PATTERN = re.compile(r"^[0-9a-fA-F]+$")
+
+
 def is_hex_string(string: str):
     return bool(HEX_PATTERN.match(string))
+
 
 def parse_hex(hex_str: str) -> bytes:
     if hex_str[0:2] == "0x":
         return bytes.fromhex(hex_str[2:])
     else:
         return bytes.fromhex(hex_str)
+
 
 def try_ss58_decode(key: bytes | str):
     ss58_format = 42
@@ -32,19 +36,21 @@ def try_ss58_decode(key: bytes | str):
         return None
     return ss58
 
-TESTNET_URL="wss://testnet-commune-api-node-0.communeai.net"
+
+TESTNET_URL = "wss://testnet-commune-api-node-0.communeai.net"
+TESTNET_UID = 27
+
 
 class MinerRegistry(Module):
 
     def __init__(self):
         super().__init__()
-        self.filepath = "./data/model_submission.json"
+
         self.client = CommuneClient(TESTNET_URL)
-        self.netuid = 27
+        self.netuid = TESTNET_UID
         # Double the amount of registrable keys
         self.registry = LRUCache(maxsize=1640)
         self.logger = EventLogger()
-
 
     """
     A module class for mining and generating responses to prompts.
@@ -55,22 +61,23 @@ class MinerRegistry(Module):
     Methods:
         generate: Generates a response to a given prompt using a specified model.
     """
+
     @endpoint
     def get_entry(
-            self,
-            key: str,
-            ):
+        self,
+        key: str,
+    ):
         result = self.registry.get(key, None)
         self.logger.info("entry", result=result)
         return result
 
-
-
     @endpoint
-    def register(self,
-                 signature: str,
-                 commit: str,
-                 ss58: str, ):
+    def register(
+        self,
+        signature: str,
+        commit: str,
+        ss58: str,
+    ):
         try:
             verified = self._register_model(signature, commit, ss58)
             result = {"commit": commit, "verified": verified, "entry": ss58}
@@ -79,13 +86,12 @@ class MinerRegistry(Module):
         except Exception as e:
             return {"verified": False}
 
-
     def _register_model(
-            self,
-            signature: str,
-            commit: str,
-            ss58: str,
-            ):
+        self,
+        signature: str,
+        commit: str,
+        ss58: str,
+    ):
 
         newkey = Keypair(
             ss58_address=ss58,
@@ -103,7 +109,7 @@ class MinerRegistry(Module):
 
 
 def cli(
-        keyname: str,
+    keyname: str,
 ):
 
     keypair = classic_load_key(keyname)
@@ -115,16 +121,12 @@ def cli(
 
     m = MinerRegistry()
     server = ModuleServer(
-        m, keypair,
-        subnets_whitelist=[27],
-        limiter=limiter_params,
-        use_testnet=True
+        m, keypair, subnets_whitelist=[27], limiter=limiter_params, use_testnet=True
     )
     app = server.get_fastapi_app()
     host = "0.0.0.0"
     port = 9769
     uvicorn.run(app, host=host, port=port)  # type: ignore
-
 
 
 if __name__ == "__main__":
@@ -133,15 +135,5 @@ if __name__ == "__main__":
     """
     from communex.module.server import ModuleServer
     import uvicorn
-    cli("key0")
-    #
-    # key = generate_keypair()
-    # miner = MinerRegistry()
-    # refill_rate = 1 / 400
-    # # Implementing custom limit
-    # bucket = TokenBucketLimiter(2, refill_rate)
-    # server = ModuleServer(miner, key, ip_limiter=bucket, subnets_whitelist=[3])
-    # app = server.get_fastapi_app()
-    #
-    # # Only allow local connections
-    # uvicorn.run(app, host="127.0.0.1", port=8000)
+
+    cli("registrar")
